@@ -1,0 +1,37 @@
+.\objects\video.o: User\video.c
+.\objects\video.o: User\video.h
+.\objects\video.o: .\Start\stm32f10x.h
+.\objects\video.o: .\Start\core_cm3.h
+.\objects\video.o: E:\Study_Work\Keil\keil 32\InstallData\Core\ARM\ARMCC\Bin\..\include\stdint.h
+.\objects\video.o: .\Start\system_stm32f10x.h
+.\objects\video.o: .\User\stm32f10x_conf.h
+.\objects\video.o: .\Library\stm32f10x_adc.h
+.\objects\video.o: .\Start\stm32f10x.h
+.\objects\video.o: .\Library\stm32f10x_bkp.h
+.\objects\video.o: .\Library\stm32f10x_can.h
+.\objects\video.o: .\Library\stm32f10x_cec.h
+.\objects\video.o: .\Library\stm32f10x_crc.h
+.\objects\video.o: .\Library\stm32f10x_dac.h
+.\objects\video.o: .\Library\stm32f10x_dbgmcu.h
+.\objects\video.o: .\Library\stm32f10x_dma.h
+.\objects\video.o: .\Library\stm32f10x_exti.h
+.\objects\video.o: .\Library\stm32f10x_flash.h
+.\objects\video.o: .\Library\stm32f10x_fsmc.h
+.\objects\video.o: .\Library\stm32f10x_gpio.h
+.\objects\video.o: .\Library\stm32f10x_i2c.h
+.\objects\video.o: .\Library\stm32f10x_iwdg.h
+.\objects\video.o: .\Library\stm32f10x_pwr.h
+.\objects\video.o: .\Library\stm32f10x_rcc.h
+.\objects\video.o: .\Library\stm32f10x_rtc.h
+.\objects\video.o: .\Library\stm32f10x_sdio.h
+.\objects\video.o: .\Library\stm32f10x_spi.h
+.\objects\video.o: .\Library\stm32f10x_tim.h
+.\objects\video.o: .\Library\stm32f10x_usart.h
+.\objects\video.o: .\Library\stm32f10x_wwdg.h
+.\objects\video.o: .\Library\misc.h
+.\objects\video.o: User\ssd1306.h
+.\objects\video.o: User\gamepad.h
+.\objects\video.o: User\bsp_delay.h
+.\objects\video.o: .\FatFs\ff.h
+.\objects\video.o: .\FatFs\ffconf.h
+.\objects\video.o: E:\Study_Work\Keil\keil 32\InstallData\Core\ARM\ARMCC\Bin\..\include\stddef.h

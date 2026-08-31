@@ -117,4 +117,15 @@ uint8_t Gamepad_GetDir(void);
   */
 void Gamepad_GetFrame(int16_t *lx, int16_t *ly, uint16_t *buttons, uint8_t *dpad);
 
+/**
+  * @brief  读取 LT 扳机原始值（0 ~ 32767，未按下约 0）
+  * @retval LT 扳机当前值；用于检测扳机是否按下（如 > 8000）
+  */
+uint16_t Gamepad_GetLT(void);
+
+/**
+  * @brief  读取 RT 扳机原始值（0 ~ 32767）
+  */
+uint16_t Gamepad_GetRT(void);
+
 #endif /* __GAMEPAD_H */

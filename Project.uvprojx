@@ -336,7 +336,7 @@
               <MiscControls></MiscControls>
               <Define>USE_STDPERIPH_DRIVER</Define>
               <Undefine></Undefine>
-              <IncludePath>.\Start;.\User;.\Library</IncludePath>
+              <IncludePath>.\Start;.\User;.\Library;.\FatFs</IncludePath>
             </VariousControls>
           </Cads>
           <Aads>
@@ -666,6 +666,26 @@
               <FilePath>.\User\gamesnake.h</FilePath>
             </File>
             <File>
+              <FileName>gamedino.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\User\gamedino.c</FilePath>
+            </File>
+            <File>
+              <FileName>gamedino.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>.\User\gamedino.h</FilePath>
+            </File>
+            <File>
+              <FileName>video.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\User\video.c</FilePath>
+            </File>
+            <File>
+              <FileName>video.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>.\User\video.h</FilePath>
+            </File>
+            <File>
               <FileName>gamepad.c</FileName>
               <FileType>1</FileType>
               <FilePath>.\User\gamepad.c</FilePath>
@@ -719,6 +739,76 @@
               <FileName>ssd1306.h</FileName>
               <FileType>5</FileType>
               <FilePath>.\User\ssd1306.h</FilePath>
+            </File>
+            <File>
+              <FileName>sd_spi.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\User\sd_spi.c</FilePath>
+            </File>
+            <File>
+              <FileName>sd_spi.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>.\User\sd_spi.h</FilePath>
+            </File>
+            <File>
+              <FileName>images.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>.\User\images.h</FilePath>
+            </File>
+            <File>
+              <FileName>menu.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\User\menu.c</FilePath>
+            </File>
+            <File>
+              <FileName>menu.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>.\User\menu.h</FilePath>
+            </File>
+            <File>
+              <FileName>album.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\User\album.c</FilePath>
+            </File>
+            <File>
+              <FileName>album.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>.\User\album.h</FilePath>
+            </File>
+          </Files>
+        </Group>
+        <Group>
+          <GroupName>FatFs</GroupName>
+          <Files>
+            <File>
+              <FileName>ff.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\FatFs\ff.c</FilePath>
+            </File>
+            <File>
+              <FileName>ff.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>.\FatFs\ff.h</FilePath>
+            </File>
+            <File>
+              <FileName>ffconf.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>.\FatFs\ffconf.h</FilePath>
+            </File>
+            <File>
+              <FileName>ffsystem.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\FatFs\ffsystem.c</FilePath>
+            </File>
+            <File>
+              <FileName>diskio.c</FileName>
+              <FileType>1</FileType>
+              <FilePath>.\FatFs\diskio.c</FilePath>
+            </File>
+            <File>
+              <FileName>diskio.h</FileName>
+              <FileType>5</FileType>
+              <FilePath>.\FatFs\diskio.h</FilePath>
             </File>
           </Files>
         </Group>

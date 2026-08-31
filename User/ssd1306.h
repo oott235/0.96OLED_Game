@@ -1,26 +1,26 @@
 ﻿/**
   ******************************************************************************
   * @file    ssd1306.h
-  * @brief   SSD1306 OLED 驱动（128x64，I2C 四线）
+  * @brief   SSD1306 OLED 驱动（128x64，4 线 SPI）
   *
   *          -----------------------------------------------
   *          屏幕引脚               STM32F103C8T6
   *          -----------------------------------------------
   *          VCC                    3.3V
   *          GND                    GND
-  *          SCL                    PB6（软件 I2C 时钟）
-  *          SDA                    PB7（软件 I2C 数据）
+  *          D0 (SCLK)              PB12（软件 SPI 时钟）
+  *          D1 (MOSI/SDIN)         PB13（软件 SPI 数据）
+  *          RES                    PB14（复位，低有效）
+  *          DC (A0)                PB15（0=命令 / 1=数据）
+  *          CS                     PA8（片选，低有效）
   *          -----------------------------------------------
   *
-  *          注 1: 使用软件 I2C（GPIO 模拟）而非硬件 I2C1。
-  *                STM32F103 硬件 I2C 存在众所周知的 busy 位卡死问题，
-  *                软件模拟对 SSD1306 这种纯写从机更稳定，且引脚可任意改。
-  *                默认 400kHz（快模式），杜邦线/长线不稳时可把
-  *                SSD1306_I2C_HALF_PERIOD_US 调大降速。
-  *          注 2: 驱动采用全屏显存（128x64/8 = 1KB，SRAM 20KB 足够）。
-  *                所有绘制先写显存，再调用 SSD1306_Display() 一次性刷屏。
-  *          注 3: I2C 地址 7 位为 0x3C（SA0=GND，常见默认）；若模块 SA0
-  *                接 VCC，地址为 0x3D，改 SSD1306_I2C_ADDR 即可。
+  *          注 1: 使用**软件 SPI**（GPIO 模拟，模式 0：SCK 空闲低、上升沿采样），
+  *                与 SD 卡的硬件 SPI1（PA5/6/7）完全独立，互不冲突。
+  *          注 2: 驱动采用**软件双缓冲**：绘制缓冲（1KB）+ 传输缓冲（1KB）。
+  *                所有绘制先写绘制缓冲，SSD1306_Display() 先快照到传输缓冲
+  *                再整帧刷屏；发送期间继续绘制不会产生撕裂/花屏。
+  *          注 3: 若模块 SA0 需配置地址，SPI 模式下无地址概念，忽略即可。
   ******************************************************************************
   */
 
@@ -30,16 +30,19 @@
 #include "stm32f10x.h"
 
 /*============================== 引脚定义 ==============================*/
-#define SSD1306_SCL_GPIO     GPIOB
-#define SSD1306_SCL_PIN      GPIO_Pin_6
-#define SSD1306_SDA_GPIO     GPIOB
-#define SSD1306_SDA_PIN      GPIO_Pin_7
+#define SSD1306_SCK_GPIO     GPIOB
+#define SSD1306_SCK_PIN      GPIO_Pin_12
+#define SSD1306_MOSI_GPIO    GPIOB
+#define SSD1306_MOSI_PIN     GPIO_Pin_13
+#define SSD1306_RES_GPIO     GPIOB
+#define SSD1306_RES_PIN      GPIO_Pin_14
+#define SSD1306_DC_GPIO      GPIOB
+#define SSD1306_DC_PIN       GPIO_Pin_15
+#define SSD1306_CS_GPIO      GPIOA
+#define SSD1306_CS_PIN       GPIO_Pin_8
 
-/* I2C 从机地址（7 位）与单周期半时长。
-   SSD1306 I2C 上限 400kHz：半周期 2us = 250kHz（默认，杜邦线稳）；
-   半周期 1us = 500kHz 略超规格，短焊线场景可试；调大降速（如 5 = 100kHz） */
-#define SSD1306_I2C_ADDR            0x3C    /* SA0=GND；SA0=VCC 时为 0x3D */
-#define SSD1306_I2C_HALF_PERIOD_US  2       /* 2us => 250kHz；调大降速（如 5 = 100kHz） */
+/* 软件 SPI 半周期（微秒）：2us ≈ 250kHz；调大降速（如 5 = 100kHz） */
+#define SSD1306_SPI_HALF_PERIOD_US  2
 
 /*============================ 屏幕分辨率 ==============================*/
 #define SSD1306_WIDTH        128
@@ -64,7 +67,7 @@
 
 /*-------------------------- 初始化与配置 -----------------------------*/
 /**
-  * @brief  初始化 OLED：GPIO（软件 I2C）、SSD1306 初始化序列、清屏
+  * @brief  初始化 OLED：GPIO（软件 SPI）、SSD1306 初始化序列、清屏
   */
 void SSD1306_Init(void);
 
@@ -74,9 +77,16 @@ void SSD1306_Init(void);
 void SSD1306_Clear(void);
 
 /**
-  * @brief  将显存一次性刷到屏幕（整屏 1024 字节，I2C 连续写）
+  * @brief  将显存一次性刷到屏幕（整屏 1024 字节）
   */
 void SSD1306_Display(void);
+
+/**
+  * @brief  局部刷新指定页范围（脏矩形支持，双缓冲）
+  * @param  page_start, page_end: 页号 0~7（每页 = 8 像素行）
+  * @note   只发送 [page_start, page_end] 页，配合脏矩形只更新变化区域
+  */
+void SSD1306_DisplayRange(uint8_t page_start, uint8_t page_end);
 
 /**
   * @brief  设置对比度（0x00 ~ 0xFF）
@@ -167,5 +177,30 @@ void SSD1306_ShowFloat(uint16_t x, uint16_t y, float value, uint8_t dec, uint8_t
   * @param  len:   十六进制位数（<=8）
   */
 void SSD1306_ShowHex(uint16_t x, uint16_t y, uint32_t value, uint8_t len, uint8_t size, uint8_t on);
+
+/*----------------------------- 位图显示 -------------------------------*/
+/**
+  * @brief  显示整幅位图（128x64，直接覆盖显存并刷屏）
+  * @param  bmp: 1024 字节位图数据，布局与显存一致（页格式）：
+  *              bmp[page*128 + x] 的 bit (y%8) 表示像素 (x, y)
+  * @note   适合显示从 SD 卡读回的图片数据；绘制前会清屏
+  */
+void SSD1306_ShowBitmap(const uint8_t *bmp);
+
+/**
+  * @brief  从页格式位图拷贝一个区域到显存（支持负坐标裁剪、反色）
+  * @param  bmp:    源位图（页格式：bmp[(y/8)*bmp_w + x] 的 bit (y%8)）
+  * @param  bmp_w:  源位图宽度（每行字节数 = bmp_w）
+  * @param  src_x, src_y: 源区域左上角
+  * @param  w, h:   区域宽高
+  * @param  dst_x, dst_y: 目标位置（像素，可负——越界部分自动裁剪）
+  * @param  invert: 1=反色绘制（用于选中高亮）
+  * @note   用于图标滑动等场景，目标超出屏幕的部分自动裁剪
+  */
+void SSD1306_ShowBitmapRegion(const uint8_t *bmp, uint16_t bmp_w,
+                              uint16_t src_x, uint16_t src_y,
+                              uint16_t w, uint16_t h,
+                              int16_t dst_x, int16_t dst_y,
+                              uint8_t invert);
 
 #endif /* __SSD1306_H */

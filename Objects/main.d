@@ -31,4 +31,13 @@
 .\objects\main.o: User\bsp_delay.h
 .\objects\main.o: User\ssd1306.h
 .\objects\main.o: User\gamesnake.h
+.\objects\main.o: User\gamedino.h
 .\objects\main.o: User\gamepad.h
+.\objects\main.o: User\sd_spi.h
+.\objects\main.o: .\FatFs\ff.h
+.\objects\main.o: .\FatFs\ffconf.h
+.\objects\main.o: User\images.h
+.\objects\main.o: User\menu.h
+.\objects\main.o: User\album.h
+.\objects\main.o: User\video.h
+.\objects\main.o: E:\Study_Work\Keil\keil 32\InstallData\Core\ARM\ARMCC\Bin\..\include\stddef.h

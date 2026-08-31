@@ -1,0 +1,33 @@
+.\objects\sd_spi.o: User\sd_spi.c
+.\objects\sd_spi.o: User\sd_spi.h
+.\objects\sd_spi.o: .\Start\stm32f10x.h
+.\objects\sd_spi.o: .\Start\core_cm3.h
+.\objects\sd_spi.o: E:\Study_Work\Keil\keil 32\InstallData\Core\ARM\ARMCC\Bin\..\include\stdint.h
+.\objects\sd_spi.o: .\Start\system_stm32f10x.h
+.\objects\sd_spi.o: .\User\stm32f10x_conf.h
+.\objects\sd_spi.o: .\Library\stm32f10x_adc.h
+.\objects\sd_spi.o: .\Start\stm32f10x.h
+.\objects\sd_spi.o: .\Library\stm32f10x_bkp.h
+.\objects\sd_spi.o: .\Library\stm32f10x_can.h
+.\objects\sd_spi.o: .\Library\stm32f10x_cec.h
+.\objects\sd_spi.o: .\Library\stm32f10x_crc.h
+.\objects\sd_spi.o: .\Library\stm32f10x_dac.h
+.\objects\sd_spi.o: .\Library\stm32f10x_dbgmcu.h
+.\objects\sd_spi.o: .\Library\stm32f10x_dma.h
+.\objects\sd_spi.o: .\Library\stm32f10x_exti.h
+.\objects\sd_spi.o: .\Library\stm32f10x_flash.h
+.\objects\sd_spi.o: .\Library\stm32f10x_fsmc.h
+.\objects\sd_spi.o: .\Library\stm32f10x_gpio.h
+.\objects\sd_spi.o: .\Library\stm32f10x_i2c.h
+.\objects\sd_spi.o: .\Library\stm32f10x_iwdg.h
+.\objects\sd_spi.o: .\Library\stm32f10x_pwr.h
+.\objects\sd_spi.o: .\Library\stm32f10x_rcc.h
+.\objects\sd_spi.o: .\Library\stm32f10x_rtc.h
+.\objects\sd_spi.o: .\Library\stm32f10x_sdio.h
+.\objects\sd_spi.o: .\Library\stm32f10x_spi.h
+.\objects\sd_spi.o: .\Library\stm32f10x_tim.h
+.\objects\sd_spi.o: .\Library\stm32f10x_usart.h
+.\objects\sd_spi.o: .\Library\stm32f10x_wwdg.h
+.\objects\sd_spi.o: .\Library\misc.h
+.\objects\sd_spi.o: User\bsp_delay.h
+.\objects\sd_spi.o: E:\Study_Work\Keil\keil 32\InstallData\Core\ARM\ARMCC\Bin\..\include\stddef.h

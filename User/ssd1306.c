@@ -1,10 +1,10 @@
 ﻿/**
   ******************************************************************************
   * @file    ssd1306.c
-  * @brief   SSD1306 OLED 驱动实现（软件 I2C + 全屏显存）
+  * @brief   SSD1306 OLED 驱动实现（软件 SPI 4 线 + 双缓冲整帧传输）
   *
   *          层次结构（自底向上）：
-  *            软件 I2C 位带  ->  命令/数据写  ->  初始化序列
+  *            软件 SPI 位带  ->  命令/数据写（DC 区分）  ->  初始化序列
   *            ->  显存（1KB）绘制  ->  整屏刷屏
   ******************************************************************************
   */
@@ -12,137 +12,120 @@
 #include "ssd1306.h"
 #include "bsp_delay.h"
 #include "fonts.h"
+#include <stddef.h>   /* NULL */
 
 /*============================== 私有定义 ===============================*/
-
-/* I2C 写地址 = 7 位地址左移 1 位，最低位 0（写方向） */
-#define SSD1306_I2C_WR   ((uint8_t)((SSD1306_I2C_ADDR << 1) | 0x00))
-
-/* 控制字节：0x00 后跟命令；0x40 后跟数据 */
-#define SSD1306_CTRL_CMD     0x00
-#define SSD1306_CTRL_DATA    0x40
 
 /* 显存大小：128 * 64 / 8 = 1024 字节 */
 #define SSD1306_FB_SIZE   ((SSD1306_WIDTH * SSD1306_HEIGHT) / 8)
 
 /*============================== 私有变量 ===============================*/
 
-/* 全屏显存：s_fb[y / 8][x] 的 bit (y % 8)，bit 置 1 = 该像素点亮 */
-static uint8_t s_fb[SSD1306_FB_SIZE];
+/*
+ * 软件双缓冲：
+ *   s_fb   绘制缓冲 —— 所有绘图接口（DrawPixel/ShowChar/ShowBitmap...）写入这里；
+ *   s_tx   传输缓冲 —— SSD1306_Display() 先把 s_fb 快照拷到 s_tx，再从 s_tx 发送。
+ *
+ * 为什么需要双缓冲：软件 SPI 整帧发送约需十几 ms，期间若主循环继续改写
+ * s_fb（快速刷新/动画场景），单缓冲会发送到"半新半旧"的混合帧，出现花屏/撕裂。
+ * 快照隔离后，发送的是按下快照瞬间的完整帧，绘制不受发送过程影响。
+ */
+static uint8_t s_fb[SSD1306_FB_SIZE];   /* 绘制缓冲（显存，页格式） */
+static uint8_t s_tx[SSD1306_FB_SIZE];   /* 传输缓冲（整帧发送快照） */
 
-/*========================== 软件 I2C 底层 ===============================*/
+/*========================== 软件 SPI 底层 ===============================*/
 
-static void SSD1306_I2C_Delay(void)
+static void SSD1306_SPI_Delay(void)
 {
-    bsp_delay_us(SSD1306_I2C_HALF_PERIOD_US);
+    bsp_delay_us(SSD1306_SPI_HALF_PERIOD_US);
 }
 
-static void SSD1306_I2C_SCL_High(void) { GPIO_SetBits(SSD1306_SCL_GPIO, SSD1306_SCL_PIN); }
-static void SSD1306_I2C_SCL_Low(void)  { GPIO_ResetBits(SSD1306_SCL_GPIO, SSD1306_SCL_PIN); }
-static void SSD1306_I2C_SDA_High(void) { GPIO_SetBits(SSD1306_SDA_GPIO, SSD1306_SDA_PIN); }
-static void SSD1306_I2C_SDA_Low(void)  { GPIO_ResetBits(SSD1306_SDA_GPIO, SSD1306_SDA_PIN); }
+static void SSD1306_SCK_High(void)  { GPIO_SetBits(SSD1306_SCK_GPIO, SSD1306_SCK_PIN); }
+static void SSD1306_SCK_Low(void)   { GPIO_ResetBits(SSD1306_SCK_GPIO, SSD1306_SCK_PIN); }
+static void SSD1306_MOSI_High(void) { GPIO_SetBits(SSD1306_MOSI_GPIO, SSD1306_MOSI_PIN); }
+static void SSD1306_MOSI_Low(void)  { GPIO_ResetBits(SSD1306_MOSI_GPIO, SSD1306_MOSI_PIN); }
+static void SSD1306_RES_High(void)  { GPIO_SetBits(SSD1306_RES_GPIO, SSD1306_RES_PIN); }
+static void SSD1306_RES_Low(void)   { GPIO_ResetBits(SSD1306_RES_GPIO, SSD1306_RES_PIN); }
+static void SSD1306_DC_High(void)   { GPIO_SetBits(SSD1306_DC_GPIO, SSD1306_DC_PIN); }
+static void SSD1306_DC_Low(void)    { GPIO_ResetBits(SSD1306_DC_GPIO, SSD1306_DC_PIN); }
+static void SSD1306_CS_High(void)   { GPIO_SetBits(SSD1306_CS_GPIO, SSD1306_CS_PIN); }
+static void SSD1306_CS_Low(void)    { GPIO_ResetBits(SSD1306_CS_GPIO, SSD1306_CS_PIN); }
 
 /**
-  * @brief  起始条件：SCL 高时 SDA 下降沿
+  * @brief  软件 SPI 发送一个字节（MSB 在前，模式 0：空闲低、上升沿采样）
   */
-static void SSD1306_I2C_Start(void)
-{
-    SSD1306_I2C_SDA_High();
-    SSD1306_I2C_SCL_High();
-    SSD1306_I2C_Delay();
-    SSD1306_I2C_SDA_Low();
-    SSD1306_I2C_Delay();
-    SSD1306_I2C_SCL_Low();
-    SSD1306_I2C_Delay();
-}
-
-/**
-  * @brief  停止条件：SCL 高时 SDA 上升沿
-  */
-static void SSD1306_I2C_Stop(void)
-{
-    SSD1306_I2C_SDA_Low();
-    SSD1306_I2C_SCL_High();
-    SSD1306_I2C_Delay();
-    SSD1306_I2C_SDA_High();
-    SSD1306_I2C_Delay();
-}
-
-/**
-  * @brief  发送一个字节（MSB 在前）
-  * @note   SDA 为推挽输出，不读从机应答（SSD1306 纯写从机，无需确认）
-  */
-static void SSD1306_I2C_SendByte(uint8_t dat)
+static void SSD1306_SPI_SendByte(uint8_t dat)
 {
     uint8_t i;
 
     for (i = 0; i < 8; i++)
     {
-        if (dat & 0x80) { SSD1306_I2C_SDA_High(); }
-        else            { SSD1306_I2C_SDA_Low(); }
-        SSD1306_I2C_Delay();
-        SSD1306_I2C_SCL_High();
-        SSD1306_I2C_Delay();
-        SSD1306_I2C_SCL_Low();
-        SSD1306_I2C_Delay();
+        SSD1306_SCK_Low();
+        if (dat & 0x80) { SSD1306_MOSI_High(); }
+        else            { SSD1306_MOSI_Low(); }
+        SSD1306_SPI_Delay();
+        SSD1306_SCK_High();             /* 上升沿，从机采样 */
+        SSD1306_SPI_Delay();
         dat <<= 1;
     }
-    /* 第 9 个时钟：释放 SDA（不检测 ACK） */
-    SSD1306_I2C_SDA_High();
-    SSD1306_I2C_Delay();
-    SSD1306_I2C_SCL_High();
-    SSD1306_I2C_Delay();
-    SSD1306_I2C_SCL_Low();
-    SSD1306_I2C_Delay();
+    SSD1306_SCK_Low();
 }
 
 /**
-  * @brief  初始化软件 I2C 引脚：SCL/SDA 推挽输出，空闲拉高
+  * @brief  初始化软件 SPI 引脚：SCK/MOSI/RES/DC/CS 全部推挽输出
   */
-static void SSD1306_I2C_Init(void)
+static void SSD1306_SPI_Init(void)
 {
     GPIO_InitTypeDef gpio;
 
-    RCC_APB2PeriphClockCmd(RCC_APB2Periph_GPIOB, ENABLE);
+    RCC_APB2PeriphClockCmd(RCC_APB2Periph_GPIOA | RCC_APB2Periph_GPIOB, ENABLE);
 
-    gpio.GPIO_Pin   = SSD1306_SCL_PIN | SSD1306_SDA_PIN;
+    gpio.GPIO_Pin   = SSD1306_SCK_PIN | SSD1306_MOSI_PIN |
+                      SSD1306_RES_PIN | SSD1306_DC_PIN;
     gpio.GPIO_Mode  = GPIO_Mode_Out_PP;
     gpio.GPIO_Speed = GPIO_Speed_50MHz;
     GPIO_Init(GPIOB, &gpio);
 
-    SSD1306_I2C_SDA_High();
-    SSD1306_I2C_SCL_High();
+    gpio.GPIO_Pin   = SSD1306_CS_PIN;
+    gpio.GPIO_Mode  = GPIO_Mode_Out_PP;
+    gpio.GPIO_Speed = GPIO_Speed_50MHz;
+    GPIO_Init(GPIOA, &gpio);
+
+    /* 空闲电平：SCK 低、MOSI 低、RES 高、DC 低、CS 高（未选中） */
+    SSD1306_SCK_Low();
+    SSD1306_MOSI_Low();
+    SSD1306_RES_High();
+    SSD1306_DC_Low();
+    SSD1306_CS_High();
 }
 
 /*======================= SSD1306 命令/数据写 =============================*/
 
 /**
-  * @brief  写一个命令字节
+  * @brief  写一个命令字节（DC=0）
   */
 static void SSD1306_WriteCmd(uint8_t cmd)
 {
-    SSD1306_I2C_Start();
-    SSD1306_I2C_SendByte(SSD1306_I2C_WR);
-    SSD1306_I2C_SendByte(SSD1306_CTRL_CMD);
-    SSD1306_I2C_SendByte(cmd);
-    SSD1306_I2C_Stop();
+    SSD1306_CS_Low();
+    SSD1306_DC_Low();
+    SSD1306_SPI_SendByte(cmd);
+    SSD1306_CS_High();
 }
 
 /**
-  * @brief  写一段数据（已含控制字节，一次 I2C 事务连续发送）
+  * @brief  写一段数据（DC=1）
   * @param  buf: 数据指针
   * @param  len: 数据长度
   */
 static void SSD1306_WriteData(const uint8_t *buf, uint16_t len)
 {
-    SSD1306_I2C_Start();
-    SSD1306_I2C_SendByte(SSD1306_I2C_WR);
-    SSD1306_I2C_SendByte(SSD1306_CTRL_DATA);
+    SSD1306_CS_Low();
+    SSD1306_DC_High();
     while (len--)
     {
-        SSD1306_I2C_SendByte(*buf++);
+        SSD1306_SPI_SendByte(*buf++);
     }
-    SSD1306_I2C_Stop();
+    SSD1306_CS_High();
 }
 
 /**
@@ -164,8 +147,14 @@ static void SSD1306_SetPos(uint8_t page, uint8_t col)
   */
 void SSD1306_Init(void)
 {
-    SSD1306_I2C_Init();
-    bsp_delay_ms(100);                  /* 上电稳定 */
+    SSD1306_SPI_Init();
+    bsp_delay_ms(50);                   /* 上电稳定 */
+
+    /* 硬件复位时序：RES 低 10ms -> 高 100ms */
+    SSD1306_RES_Low();
+    bsp_delay_ms(10);
+    SSD1306_RES_High();
+    bsp_delay_ms(100);
 
     /* 经典 SSD1306 128x64 初始化序列 */
     SSD1306_WriteCmd(0xAE);             /* 关闭显示 */
@@ -223,17 +212,59 @@ void SSD1306_Clear(void)
 }
 
 /**
-  * @brief  整屏刷显存：逐页写入（页寻址模式）
-  * @note   每页 128 字节，共 8 页；页面内按列从左到右
+  * @brief  整屏刷显存（双缓冲整帧传输）
+  * @note   先瞬时快照 s_fb -> s_tx，再从 s_tx 逐页发送：
+  *         - 发送期间主循环可继续绘制 s_fb，不会撕裂/花屏
+  *         - 每页 128 字节连续写，共 8 页（页寻址模式）
   */
 void SSD1306_Display(void)
 {
     uint8_t page;
+    uint16_t i;
+
+    /* 双缓冲快照：瞬时拷贝（几十微秒），发送过程读 s_tx */
+    for (i = 0; i < SSD1306_FB_SIZE; i++)
+    {
+        s_tx[i] = s_fb[i];
+    }
 
     for (page = 0; page < 8; page++)
     {
         SSD1306_SetPos(page, 0);
-        SSD1306_WriteData(&s_fb[page * SSD1306_WIDTH], SSD1306_WIDTH);
+        SSD1306_WriteData(&s_tx[page * SSD1306_WIDTH], SSD1306_WIDTH);
+    }
+}
+
+/**
+  * @brief  局部刷新指定页范围（脏矩形支持，双缓冲）
+  * @param  page_start, page_end: 页号 0~7（每页 = 8 像素行）
+  * @note   只发送 [page_start, page_end] 范围内的页，配合脏矩形算法
+  *         只更新变化区域，大幅减少传输量。发送过程同样读 s_tx 快照，
+  *         不干扰主循环继续绘制 s_fb。
+  */
+void SSD1306_DisplayRange(uint8_t page_start, uint8_t page_end)
+{
+    uint8_t page, p0, p1;
+    uint16_t i;
+
+    if (page_start > page_end) { p0 = page_end; p1 = page_start; }
+    else                       { p0 = page_start; p1 = page_end; }
+    if (p0 > 7) p0 = 7;
+    if (p1 > 7) p1 = 7;
+
+    /* 双缓冲快照：只拷贝需要刷新的页 */
+    for (page = p0; page <= p1; page++)
+    {
+        for (i = 0; i < SSD1306_WIDTH; i++)
+        {
+            s_tx[page * SSD1306_WIDTH + i] = s_fb[page * SSD1306_WIDTH + i];
+        }
+    }
+
+    for (page = p0; page <= p1; page++)
+    {
+        SSD1306_SetPos(page, 0);
+        SSD1306_WriteData(&s_tx[page * SSD1306_WIDTH], SSD1306_WIDTH);
     }
 }
 
@@ -610,4 +641,58 @@ void SSD1306_ShowHex(uint16_t x, uint16_t y, uint32_t value, uint8_t len, uint8_
     }
     buf[len] = '\0';
     SSD1306_ShowString(x, y, size, buf, on);
+}
+
+/*=========================== 公共接口：位图显示 =========================*/
+
+/**
+  * @brief  显示整幅位图（128x64，页格式直接覆盖显存并刷屏）
+  */
+void SSD1306_ShowBitmap(const uint8_t *bmp)
+{
+    uint16_t i;
+
+    if (bmp == NULL) return;
+
+    for (i = 0; i < SSD1306_FB_SIZE; i++)
+    {
+        s_fb[i] = bmp[i];
+    }
+    SSD1306_Display();
+}
+
+/**
+  * @brief  从页格式位图拷贝一个区域到显存（负坐标裁剪、可选反色）
+  */
+void SSD1306_ShowBitmapRegion(const uint8_t *bmp, uint16_t bmp_w,
+                              uint16_t src_x, uint16_t src_y,
+                              uint16_t w, uint16_t h,
+                              int16_t dst_x, int16_t dst_y,
+                              uint8_t invert)
+{
+    uint16_t dx, dy;
+    uint16_t sx, sy;
+    uint8_t bit;
+
+    if (bmp == NULL) return;
+
+    for (dy = 0; dy < h; dy++)
+    {
+        sy = src_y + dy;
+        for (dx = 0; dx < w; dx++)
+        {
+            int16_t px = (int16_t)(dst_x + (int16_t)dx);
+            int16_t py = (int16_t)(dst_y + (int16_t)dy);
+
+            /* 目标越界裁剪 */
+            if (px < 0 || px >= (int16_t)SSD1306_WIDTH) continue;
+            if (py < 0 || py >= (int16_t)SSD1306_HEIGHT) continue;
+
+            sx = src_x + dx;
+            bit = (uint8_t)((bmp[(sy / 8) * bmp_w + sx] >> (sy % 8)) & 0x01);
+            if (invert) bit = bit ? 0 : 1;
+
+            SSD1306_DrawPixel((uint16_t)px, (uint16_t)py, bit);
+        }
+    }
 }

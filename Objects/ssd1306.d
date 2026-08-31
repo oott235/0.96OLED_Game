@@ -31,3 +31,4 @@
 .\objects\ssd1306.o: .\Library\misc.h
 .\objects\ssd1306.o: User\bsp_delay.h
 .\objects\ssd1306.o: User\fonts.h
+.\objects\ssd1306.o: E:\Study_Work\Keil\keil 32\InstallData\Core\ARM\ARMCC\Bin\..\include\stddef.h

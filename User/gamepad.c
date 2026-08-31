@@ -252,3 +252,19 @@ void Gamepad_GetFrame(int16_t *lx, int16_t *ly, uint16_t *buttons, uint8_t *dpad
     if (buttons) *buttons = s_buttons;
     if (dpad)    *dpad = s_dpad;
 }
+
+/**
+  * @brief  读取 LT 扳机原始值（0 ~ 32767）
+  */
+uint16_t Gamepad_GetLT(void)
+{
+    return s_lt;
+}
+
+/**
+  * @brief  读取 RT 扳机原始值（0 ~ 32767）
+  */
+uint16_t Gamepad_GetRT(void)
+{
+    return s_rt;
+}
