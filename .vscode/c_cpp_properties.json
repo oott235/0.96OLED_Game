@@ -1,0 +1,20 @@
+{
+    "version": 4,
+    "configurations": [
+        {
+            "name": "Keil STM32F103",
+            "includePath": [
+                "${workspaceFolder}/Start",
+                "${workspaceFolder}/Library",
+                "${workspaceFolder}/User"
+            ],
+            "defines": [
+                "USE_STDPERIPH_DRIVER",
+                "STM32F10X_MD"
+            ],
+            "cStandard": "c99",
+            "cppStandard": "c++11",
+            "intelliSenseMode": "gcc-arm"
+        }
+    ]
+}
