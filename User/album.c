@@ -181,12 +181,12 @@ void Album_Run(void)
         if (s_count > 0)
         {
             /* RT：下一张；LT：上一张（扳机按下判定） */
-            if (Gamepad_GetRT() > 8000)
+            if (Gamepad_GetRT() > GAMEPAD_TRIGGER_ON)
             {
                 s_index = (uint8_t)((s_index + 1) % s_count);
                 Album_Show();
             }
-            else if (Gamepad_GetLT() > 8000)
+            else if (Gamepad_GetLT() > GAMEPAD_TRIGGER_ON)
             {
                 s_index = (uint8_t)((s_index + s_count - 1) % s_count);
                 Album_Show();

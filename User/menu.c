@@ -180,14 +180,14 @@ void Menu_Run(menu_item_t *items, uint8_t count, const char *hint)
         if (s_state == 0)
         {
             /* RT：右翻（新页从右滑入）；LT：左翻（新页从左滑入） */
-            if (Gamepad_GetRT() > 8000)
+            if (Gamepad_GetRT() > GAMEPAD_TRIGGER_ON)
             {
                 s_dir = MENU_DIR_NEXT;
                 s_target = (uint8_t)((s_sel + 1) % s_count);   /* 循环 */
                 s_anim_start = g_tick_ms;
                 s_state = 1;
             }
-            else if (Gamepad_GetLT() > 8000)
+            else if (Gamepad_GetLT() > GAMEPAD_TRIGGER_ON)
             {
                 s_dir = MENU_DIR_PREV;
                 s_target = (uint8_t)((s_sel + s_count - 1) % s_count);  /* 循环 */

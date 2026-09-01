@@ -1,0 +1,7 @@
+*** Using Compiler 'V5.06 update 5 (build 528)', folder: 'E:\Study_Work\Keil\keil 32\InstallData\Core\ARM\ARMCC\Bin'
+Build target 'Target 1'
+compiling signal.c...
+linking...
+Program Size: Code=41212 RO-data=10972 RW-data=596 ZI-data=16676  
+".\Objects\Project.axf" - 0 Error(s), 0 Warning(s).
+Build Time Elapsed:  00:00:01

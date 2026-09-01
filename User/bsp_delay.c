@@ -66,3 +66,13 @@ void bsp_delay_us(uint32_t us)
         /* 等待周期计数前进 ticks 个周期 */
     }
 }
+
+/**
+  * @brief  读取当前微秒计数（DWT 周期计数换算，用于高精度测时）
+  * @retval 自 bsp_delay_init 以来的微秒数（约 1ms 后即有意义）
+  * @note   配合差值使用：(bsp_delay_us_now() - start) 为经过的微秒数
+  */
+uint32_t bsp_delay_us_now(void)
+{
+    return DWT_CYCCNT_REG / (SystemCoreClock / 1000000U);
+}

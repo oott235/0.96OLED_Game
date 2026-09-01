@@ -69,6 +69,10 @@
 /* 左摇杆死区（|原始值| 小于该值视为回中，满量程 ±32768） */
 #define GAMEPAD_STICK_DEADZONE  8000
 
+/* 扳机（LT/RT）触发阈值：满量程 32767 的后 1/5（= 4/5 处起触发），
+   即需要按到约 80% 行程以上才判定"按下"，防止误触 */
+#define GAMEPAD_TRIGGER_ON      26214
+
 /* 方向编码（与贪吃蛇 s_dir 一致）：0上 1右 2下 3左；无输入为 0xFF */
 #define GAMEPAD_DIR_NONE    0xFF
 
@@ -119,7 +123,8 @@ void Gamepad_GetFrame(int16_t *lx, int16_t *ly, uint16_t *buttons, uint8_t *dpad
 
 /**
   * @brief  读取 LT 扳机原始值（0 ~ 32767，未按下约 0）
-  * @retval LT 扳机当前值；用于检测扳机是否按下（如 > 8000）
+  * @retval LT 扳机当前值；用于检测扳机是否按下
+  *         （阈值 GAMEPAD_TRIGGER_ON = 26214，即后 1/5 行程触发）
   */
 uint16_t Gamepad_GetLT(void);
 

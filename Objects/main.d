@@ -40,4 +40,6 @@
 .\objects\main.o: User\menu.h
 .\objects\main.o: User\album.h
 .\objects\main.o: User\video.h
+.\objects\main.o: User\servo.h
+.\objects\main.o: User\signal.h
 .\objects\main.o: E:\Study_Work\Keil\keil 32\InstallData\Core\ARM\ARMCC\Bin\..\include\stddef.h

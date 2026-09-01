@@ -43,6 +43,9 @@
 static uint8_t  s_sdhc;          /* 1 = 高容量卡（SDHC/SDXC，块寻址） */
 static uint32_t s_sector_count;  /* 总扇区数 */
 
+/* 诊断：ACMD41 循环最后一次 R1（0xFF=无响应/线断，0x01=卡未就绪，0x00=成功） */
+uint8_t sd_acmd41_r1 = 0xFF;
+
 /*========================== SPI 底层收发 ================================*/
 
 /**
@@ -201,14 +204,29 @@ uint8_t SD_Init(void)
         for (i = 0; i < 4; i++) (void)SD_ReadByte();   /* 丢弃 4 字节响应（含 0x1AA） */
     }
 
-    /* CMD55 + ACMD41 循环，直至退出空闲（R1=0x00），最多 1s */
-    timeout = 1000;
+    /* CMD55 + ACMD41 初始化（退出空闲，R1=0x00）
+       第一轮：HCS=1 请求高容量（SDHC/SDXC），最多 1.5s
+       第二轮：HCS=0 普通容量（SDSC 老卡兼容），最多 1.5s */
+    timeout = 1500;
     do
     {
         SD_SendCmd(SD_CMD55, 0, 0xFF);               /* CMD55：下一个是应用命令 */
         r1 = SD_SendCmd(SD_ACMD41, 0x40000000, 0xFF); /* ACMD41：HCS=1，请求高容量 */
         bsp_delay_ms(1);
     } while ((r1 != 0x00) && (--timeout > 0));
+
+    if (r1 != 0x00)
+    {
+        /* 第一轮失败：按 SDSC 老卡再试（HCS=0），部分卡对 HCS=1 不兼容 */
+        timeout = 1500;
+        do
+        {
+            SD_SendCmd(SD_CMD55, 0, 0xFF);
+            r1 = SD_SendCmd(SD_ACMD41, 0x00000000, 0xFF); /* ACMD41：HCS=0 */
+            bsp_delay_ms(1);
+        } while ((r1 != 0x00) && (--timeout > 0));
+    }
+    sd_acmd41_r1 = r1;                               /* 记录最后一次 R1 供诊断 */
 
     if (r1 != 0x00)
     {

@@ -24,6 +24,8 @@
 /* Includes ------------------------------------------------------------------*/
 #include "stm32f10x_it.h"
 #include "bsp_delay.h"   /* for g_tick_ms (1 ms SysTick time base) */
+#include "usb_lib.h"     /* USB_Istr() */
+#include "usb_istr.h"
 
 /** @addtogroup STM32F10x_StdPeriph_Template
   * @{
@@ -136,6 +138,23 @@ void PendSV_Handler(void)
 void SysTick_Handler(void)
 {
   g_tick_ms++;
+}
+
+/**
+  * @brief  USB 低优先级中断（USB_LP_CAN1_RX0_IRQHandler）
+  * @note   USB CDC 设备核心中断：所有 USB 传输/复位/唤醒事件都走这里
+  */
+void USB_LP_CAN1_RX0_IRQHandler(void)
+{
+  USB_Istr();
+}
+
+/**
+  * @brief  USB 唤醒中断
+  */
+void USBWakeUp_IRQHandler(void)
+{
+  EXTI_ClearITPendingBit(EXTI_Line18);
 }
 
 /******************************************************************************/

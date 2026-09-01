@@ -34,4 +34,11 @@ void bsp_delay_ms(uint32_t ms);
   */
 void bsp_delay_us(uint32_t us);
 
+/**
+  * @brief  读取当前微秒计数（DWT 周期计数换算，用于高精度测时）
+  * @retval 自 bsp_delay_init 以来的微秒数
+  * @note   配合差值使用：(bsp_delay_us_now() - start) 为经过的微秒数
+  */
+uint32_t bsp_delay_us_now(void);
+
 #endif /* __BSP_DELAY_H */

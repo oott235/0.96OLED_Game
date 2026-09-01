@@ -1,4 +1,4 @@
-﻿/**
+/**
   ******************************************************************************
   * @file    main.c
   * @brief   0.96 寸 SSD1306 OLED（SPI）+ 无线手柄 + SD 卡 + 滚动菜单
@@ -10,6 +10,10 @@
   *          菜单项：
   *            GAME   贪吃蛇（A/B/X 控制，见 gamesnake.h）
   *            ALBUM  相册（浏览 SD 卡 .BIN 图片，LT/RT 切换）
+  *            VIDEO  视频播放（SD 卡 /VIDEO/ 目录 .BIN，LT/RT 选，A 播放）
+   *            RADAR  S3010 舵机控制（LT 逆时针 / RT 顺时针，屏幕显示角度）
+   *            SIGNAL 信号发生器（DAC+USART3，正弦/三角/方波/锯齿，PA4 或 vofa+ 输出）
+  *            DL     TTL 下载视频到 SD 卡（电脑 USB-TTL -> USART1 -> /VIDEO/）
   *
   *          菜单操作：LT/RT 滚动选择，A 确认进入，X 返回
   ******************************************************************************
@@ -27,12 +31,14 @@
 #include "menu.h"
 #include "album.h"
 #include "video.h"
+#include "servo.h"
+#include "signal.h"
 #include <stddef.h>   /* NULL */
 
 /*
  * OLED 自检开关：
- *   1 = OLED 自检模式（显存几何图形 + 字符表循环，用于验证新屏）
- *   0 = 正常模式（滚动菜单）  <- 正常使用
+ *   1 = OLED 自检模式（显存几何图 正常使用形 + 字符表循环，用于验证新屏）
+ *   0 = 正常模式（滚动菜单）  <-
  */
 #define OLED_SELFTEST   0
 
@@ -91,6 +97,8 @@ static void oled_selftest(void)
 /* SD 卡文件系统对象（FatFS 挂载用） */
 static FATFS s_sd_fs;
 static uint8_t s_sd_ok;      /* 1 = SD 卡挂载成功 */
+static uint8_t sd_fs_init_code;  /* SD 初始化失败诊断码（0=成功） */
+static uint8_t sd_init_detail;   /* SD_Init 内部失败点：1=CMD0 无响应 2=ACMD41 超时 3=OCR 失败 */
 
 /* f_mkfs 工作缓冲（格式化用，需 >= 2*FF_MAX_SS；放全局避免爆栈） */
 static uint8_t s_mkfs_work[2048];
@@ -107,6 +115,8 @@ static uint8_t s_img_page[1024];
 static uint8_t s_page_game[1024];
 static uint8_t s_page_album[1024];
 static uint8_t s_page_video[1024];
+static uint8_t s_page_radar[1024];
+static uint8_t s_page_signal[1024];
 
 /**
   * @brief  初始化 SD 卡并挂载 FAT32 文件系统
@@ -119,8 +129,13 @@ static uint8_t sd_fs_init(void)
     FRESULT fr;
     MKFS_PARM opt;
 
-    if (SD_Init() != 0)
+    sd_fs_init_code = 0;
+    sd_init_detail  = 0;
+
+    sd_init_detail = SD_Init();
+    if (sd_init_detail != 0)
     {
+        sd_fs_init_code = 1;
         return 1;
     }
 
@@ -143,6 +158,7 @@ static uint8_t sd_fs_init(void)
     fr = f_mkfs("0:", &opt, s_mkfs_work, sizeof(s_mkfs_work));
     if (fr != FR_OK)
     {
+        sd_fs_init_code = 3;
         return 3;
     }
 
@@ -150,6 +166,7 @@ static uint8_t sd_fs_init(void)
     fr = f_mount(&s_sd_fs, "0:", 1);
     if (fr != FR_OK)
     {
+        sd_fs_init_code = 4;
         return 4;
     }
 
@@ -278,12 +295,12 @@ static void App_Game(void)
 
         /* LT/RT 移动光标（边沿触发，避免连滚）：
            LT = 上一个软件（光标上移），RT = 下一个软件（光标下移） */
-        if (Gamepad_GetLT() > 8000)
+        if (Gamepad_GetLT() > GAMEPAD_TRIGGER_ON)
         {
             sel = (uint8_t)((sel + APP_COUNT - 1) % APP_COUNT);
             draw = 1;
         }
-        else if (Gamepad_GetRT() > 8000)
+        else if (Gamepad_GetRT() > GAMEPAD_TRIGGER_ON)
         {
             sel = (uint8_t)((sel + 1) % APP_COUNT);
             draw = 1;
@@ -326,12 +343,39 @@ int main(void)
     SSD1306_Init();
     Gamepad_Init();
 
-    /* SD 卡初始化 + FAT32 挂载（显示进度） */
+    /* SD 卡初始化 + FAT32 挂载（显示进度 + 失败原因诊断） */
     SSD1306_Clear();
     SSD1306_ShowString(0, 0, 2, "SD CARD INIT", SSD1306_COLOR_ON);
     SSD1306_ShowString(0, 16, 1, "wait...", SSD1306_COLOR_ON);
     SSD1306_Display();
     s_sd_ok = (sd_fs_init() == 0);
+
+    /* 失败时显示诊断码：1=SPI/接线失败 2=挂载失败 3=格式化失败 4=格式化后挂载失败
+       其中 code=1 时 detail 细分：1=CMD0 无响应 2=ACMD41 超时 3=OCR 失败
+       ACMD41 超时时显示最后一次 R1：0x01=卡未就绪(供电/卡慢) 0xFF=线断/无响应
+       （停留 3 秒，方便确认卡没被识别的原因） */
+    if (!s_sd_ok)
+    {
+        SSD1306_Clear();
+        SSD1306_ShowString(0, 0, 1, "SD FAIL", SSD1306_COLOR_ON);
+        SSD1306_ShowString(0, 16, 1, "code: ", SSD1306_COLOR_ON);
+        SSD1306_ShowNum(40, 16, (uint32_t)sd_fs_init_code, 1, 1, SSD1306_COLOR_ON);
+        if (sd_fs_init_code == 1)
+        {
+            SSD1306_ShowString(64, 16, 1, "d:", SSD1306_COLOR_ON);
+            SSD1306_ShowNum(80, 16, (uint32_t)sd_init_detail, 1, 1, SSD1306_COLOR_ON);
+            if (sd_init_detail == 2)
+            {
+                SSD1306_ShowString(0, 24, 1, "r1: ", SSD1306_COLOR_ON);
+                SSD1306_ShowHex(24, 24, (uint32_t)sd_acmd41_r1, 2, 1, SSD1306_COLOR_ON);
+            }
+        }
+        SSD1306_ShowString(0, 32, 1, "1=SPI 2=Mount", SSD1306_COLOR_ON);
+        SSD1306_ShowString(0, 40, 1, "3=Format 4=Re", SSD1306_COLOR_ON);
+        SSD1306_ShowString(0, 56, 1, "check wiring", SSD1306_COLOR_ON);
+        SSD1306_Display();
+        bsp_delay_ms(3000);
+    }
 
     /* SD 正常时把三张内置图片写入卡（仅首次），并创建视频分区目录 */
     if (s_sd_ok)
@@ -340,20 +384,28 @@ int main(void)
         f_mkdir("0:/VIDEO");            /* 视频分区（已存在则返回 FR_EXIST，可忽略） */
     }
 
-    /* 生成整幅页格式页面：GAME=蛇图，ALBUM=鲸鱼女孩图，VIDEO=cmd 终端图 */
+    /* 生成整幅页格式页面：GAME=蛇图，ALBUM=鲸鱼女孩图，VIDEO=cmd 终端图，
+       RADAR=radar 图标，SIGNAL=信号发生器图标 */
     img_to_page(s_img_snake);
     for (i = 0; i < 1024; i++) s_page_game[i] = s_img_page[i];
     img_to_page(s_img_whale);
     for (i = 0; i < 1024; i++) s_page_album[i] = s_img_page[i];
     img_to_page(s_img_cmd);
     for (i = 0; i < 1024; i++) s_page_video[i] = s_img_page[i];
+    img_to_page(s_img_radar);
+    for (i = 0; i < 1024; i++) s_page_radar[i] = s_img_page[i];
+    img_to_page(s_img_signal);
+    for (i = 0; i < 1024; i++) s_page_signal[i] = s_img_page[i];
 
-    /* 菜单项（双向链表由 menu 内部串联；page 为 128x64 页格式整幅图） */
+    /* 菜单项（双向链表由 menu 内部串联；page 为 128x64 页格式整幅图）
+       主页共五页：GAME / ALBUM / VIDEO / RADAR / SIGNAL，DL 在 VIDEO 应用内部 */
     static menu_item_t s_menu_items[] =
     {
-        { "GAME",  App_Game,  s_page_game,  NULL, NULL },
-        { "ALBUM", Album_Run, s_page_album, NULL, NULL },
-        { "VIDEO", Video_Run, s_page_video, NULL, NULL },
+        { "GAME",   App_Game,   s_page_game,   NULL, NULL },
+        { "ALBUM",  Album_Run,  s_page_album,  NULL, NULL },
+        { "VIDEO",  Video_Run,  s_page_video,  NULL, NULL },
+        { "RADAR",  Servo_Run,  s_page_radar,  NULL, NULL },
+        { "SIGNAL", Signal_Run, s_page_signal, NULL, NULL },
     };
 
     /* 进入整屏翻页菜单（阻塞，LT 左翻 / RT 右翻，A 确认） */

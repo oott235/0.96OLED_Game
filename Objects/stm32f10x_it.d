@@ -30,3 +30,16 @@
 .\objects\stm32f10x_it.o: .\Library\stm32f10x_wwdg.h
 .\objects\stm32f10x_it.o: .\Library\misc.h
 .\objects\stm32f10x_it.o: User\bsp_delay.h
+.\objects\stm32f10x_it.o: .\User\usb\usb_lib.h
+.\objects\stm32f10x_it.o: .\User\usb\hw_config.h
+.\objects\stm32f10x_it.o: .\User\usb\platform_config.h
+.\objects\stm32f10x_it.o: .\User\usb\usb_type.h
+.\objects\stm32f10x_it.o: .\User\usb\usb_conf.h
+.\objects\stm32f10x_it.o: .\User\usb\usb_regs.h
+.\objects\stm32f10x_it.o: .\User\usb\usb_def.h
+.\objects\stm32f10x_it.o: .\User\usb\usb_core.h
+.\objects\stm32f10x_it.o: .\User\usb\usb_init.h
+.\objects\stm32f10x_it.o: .\User\usb\usb_sil.h
+.\objects\stm32f10x_it.o: .\User\usb\usb_mem.h
+.\objects\stm32f10x_it.o: .\User\usb\usb_int.h
+.\objects\stm32f10x_it.o: .\User\usb\usb_istr.h

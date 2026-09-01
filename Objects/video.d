@@ -32,6 +32,7 @@
 .\objects\video.o: User\ssd1306.h
 .\objects\video.o: User\gamepad.h
 .\objects\video.o: User\bsp_delay.h
+.\objects\video.o: User\sd_dl.h
 .\objects\video.o: .\FatFs\ff.h
 .\objects\video.o: .\FatFs\ffconf.h
 .\objects\video.o: E:\Study_Work\Keil\keil 32\InstallData\Core\ARM\ARMCC\Bin\..\include\stddef.h
