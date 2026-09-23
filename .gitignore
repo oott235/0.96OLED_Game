@@ -1,0 +1,37 @@
+# ===== Keil MDK 编译产物（不需要提交）=====
+Objects/
+Listings/
+*.o
+*.crf
+*.d
+*.axf
+*.htm
+*.lnp
+*.sct
+*.dep
+*.bak
+*.i
+*.__i
+*.iex
+*.map
+*_build_log.txt
+build_log.txt
+
+# ===== Keil 用户个人设置（可选保留）=====
+*.uvguix.*
+*.uvoptx
+*.scvd
+JLinkLog.txt
+JLinkSettings.ini
+
+# ===== 大文件资源（视频/转换素材，按需保留）=====
+# 3.4MB 视频 BIN，需要时放 SD 卡即可，不必进仓库
+18BADAPP.BIN
+video_*.txt
+*.BIN
+
+# ===== 其他 =====
+*.log
+*.tmp
+DebugConfig/
+RTE/_Target_1/

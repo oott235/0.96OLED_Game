@@ -1,5 +1,9 @@
 # STM32F103C8T6 + 0.96" SSD1306 OLED(SPI) + 无线手柄 + SD 卡 + 游戏/相册/视频/雷达/信号发生器
 
+**语言 / Language：中文 | [English](README_EN.md)**
+
+🎬 **演示视频 / Demo video**：<https://github.com/oott235/0.96OLED_Game/issues/1#issue-5554713905>
+
 基于 STM32F103C8T6（Cortex-M3 @ 72MHz，Flash 64KB / SRAM 20KB）的多媒体娱乐工程：
 **整屏翻页主页 + 应用菜单（游戏 / 相册 / 视频 / 雷达 / 信号发生器）+ SD 卡 FAT32 文件系统**。
 
@@ -338,3 +342,376 @@ Start/            启动文件、core_cm3、stm32f10x.h、system_stm32f10x.c
 - ST USB-FS-Device 库 V4.0（CDC 虚拟串口）
 - HC-SR04 超声波模块数据手册
 - Linux `lib/fonts/font_8x16.c`（VGA 8x16 字体数据，公有领域）
+
+---
+
+# English Documentation
+
+**Language: [中文](#stm32f103c8t6--096-ssd1306-oledspi--无线手柄--sd-卡--游戏相册视频雷达信号发生器) | English**
+
+🎬 **Demo video**: <https://github.com/oott235/0.96OLED_Game/issues/1#issue-5554713905>
+
+A multimedia entertainment project based on STM32F103C8T6 (Cortex-M3 @ 72MHz,
+64KB Flash / 20KB SRAM):
+**full-screen page-flip home menu + app menu (games / album / video / radar / signal generator)
++ SD card FAT32 file system**.
+
+Toolchain: Keil MDK (ARMCC V5.06) + Standard Peripheral Library SPL 3.5.0 + FatFS R0.14b.
+
+- Display: 0.96" SSD1306 OLED, 128x64 monochrome, **4-wire bit-banged SPI** (double buffer + dirty rectangle)
+- Gamepad: wireless gamepad (BT/2.4G paired to PC) → USB-TTL → USART1 (115200), 18-byte frame
+- Storage: SD card (SPI1 + FatFS), auto-format to FAT32, images/videos organized in folders
+- Home menu: full-screen page flip (LT = previous / RT = next, sine easing), **5 pages**
+  (GAME / ALBUM / VIDEO / RADAR / SIGNAL)
+- Apps: GAME (snake, dino), ALBUM (photo viewer), VIDEO (player, DL uploader at list bottom),
+  RADAR (S3010 servo + HC-SR04 ultrasonic radar), SIGNAL (USB signal generator + GPIO waveform)
+
+## Highlight: DL — write videos straight into SD card /VIDEO/ over TTL
+
+**No card reader needed**: convert a `video_xxx.txt` to BIN on the PC, then push it into the
+STM32's SD card `/VIDEO/` folder through a USB-TTL adapter — ready to play on next boot.
+
+```
+video_xxx.txt ──► video_to_bin.py ──► 18BADAPP.BIN
+                                            │
+   PC ──USB──► USB-TTL adapter ──3 jumpers──► STM32F103C8T6
+                                            │            │
+                                            │   select DL at VIDEO list bottom (A)
+                                            └──USART1────┘
+                                     writes into SD card /VIDEO/
+```
+
+| Connection | STM32 pin | Note |
+| :--- | :--- | :--- |
+| USB-TTL TX | PA10 (USART1_RX) | receives video data from PC |
+| USB-TTL RX | PA9 (USART1_TX) | **required** (device sends ACK per block) |
+| USB-TTL GND | GND | must share ground with MCU |
+
+> Close the gamepad forwarder (`handle_to_serial.py`) before uploading — the port must be free.
+> Full workflow: `VideoToBinConversion/README.md`; command: `python video_to_bin.py --send-sd`.
+> **DL lives only at the bottom of the VIDEO app list; the home menu has no DL entry.**
+
+## Feature Overview
+
+| Screen | Controls | Description |
+| :--- | :--- | :--- |
+| Home | LT/RT flip, A enter | **5 pages** of full-screen images (GAME / ALBUM / VIDEO / RADAR / SIGNAL), sine easing animation |
+| GAME | LT/RT move cursor, A start, X back | Software list: 1.SNAKE, 2.DINO |
+| ALBUM | LT/RT switch, A/X back | Browse `.BIN` images in SD root |
+| VIDEO | LT/RT move cursor, A play, B pause, X back | Play `.BIN` videos in `/VIDEO/`; **DL uploader at list bottom** |
+| RADAR | pick mode first (1 MANUAL / 2 AUTO) | Servo + ultrasonic: manual angle or auto-sweep radar image |
+| SIGNAL | pick mode first (1 USB / 2 GPIO) | Signal generator: USB waveforms for vofa+ or PA4 square/PWM output |
+
+## Wiring
+
+### OLED: SSD1306 0.96" (4-wire bit-banged SPI)
+
+| Module pin | STM32 pin | Note |
+| :--- | :--- | :--- |
+| VCC | 3.3V | logic supply |
+| GND | GND | common ground |
+| D0 (SCLK) | PB12 | software SPI clock (mode 0, sample on rising edge) |
+| D1 (MOSI/SDIN) | PB13 | software SPI data |
+| RES | PB14 | reset (active low) |
+| DC (A0) | PB15 | 0 = command / 1 = data |
+| CS | PA8 | chip select (active low) |
+
+### SD card module (hardware SPI1, CS on PB0)
+
+| Module pin | STM32 pin | Note |
+| :--- | :--- | :--- |
+| VCC | **5V** | this module accepts 5V (on-board regulator/level shifter); 3.3V causes init failure (`r1:01`) |
+| GND | GND | common ground |
+| CS | **PB0** | chip select (push-pull GPIO, avoids SPI1 hardware pin limits) |
+| SCK | PA5 | SPI1_SCK |
+| MISO | PA6 | SPI1_MISO |
+| MOSI | PA7 | SPI1_MOSI |
+
+> Supports SDSC / SDHC / SDXC. Init at 281kHz, then 9MHz.
+> Unformatted (non-FAT32) cards are **auto-formatted to FAT32** (`f_mkfs`) — no PC card reader needed.
+> Boot diagnostics: `code:1 d:1` = no CMD0 response (check wiring), `d:2 r1:01` = undervoltage/card not ready,
+> `d:2 r1:FF` = MISO broken. **Changing the CS pin never erases the card**; only a failed mount triggers formatting.
+
+### Wireless gamepad (USB-TTL forwarding) and TTL upload share USART1
+
+| Connection | STM32 pin | Note |
+| :--- | :--- | :--- |
+| USB-TTL TX | PA10 (USART1_RX) | gamepad frames / upload data |
+| USB-TTL RX | PA9 (USART1_TX) | optional for gamepad; **required for DL** (ACK) |
+| USB-TTL GND | GND | common ground |
+
+> PC-side tool: `TTlHandleConversion/handle_to_serial.py` (gamepad → PC → USB-TTL),
+> sending an **18-byte frame** at 100Hz (`0xAA 0x55` header + left/right stick int16 +
+> LT/RT trigger uint16 + button bitmap uint16 + D-pad + checksum) at 115200 8N1.
+> The STM32 parses it inside the USART1 RXNE interrupt in `gamepad.c`.
+
+### RADAR: S3010 servo + HC-SR04 ultrasonic
+
+| Module | STM32 pin | Note |
+| :--- | :--- | :--- |
+| Servo signal | **PA2** (TIM2_CH3) | S3010, 50Hz PWM (0.5–2.5ms = 0–180°) |
+| HC-SR04 Trig | **PA0** | trigger (push-pull output) |
+| HC-SR04 Echo | **PA1** | echo (pull-down input; add 500Ω or a divider when the module runs at 5V — PA1 is not 5V tolerant) |
+| HC-SR04 VCC | 5V | the module needs 5V (3.3V only reaches a few cm) |
+| GND | GND | common ground; power the servo from its own supply, sharing only ground |
+
+### SIGNAL: USB / GPIO output
+
+| Connection | STM32 pin | Note |
+| :--- | :--- | :--- |
+| micro USB port | PA11 (DP) / PA12 (DM) | **connect straight to PC** (USB CDC virtual COM, mode 1, no TTL adapter) |
+| Waveform output | **PA4** | push-pull GPIO (mode 2, square wave / PWM waveform) |
+| GND | GND | common ground with the measuring device |
+
+### Debugging
+
+SWD: PA13 (SWDIO) / PA14 (SWCLK), not used by the application.
+
+## SD Card Layout
+
+Boot flow: SD init → mount FAT32 (auto-format) → write built-in images (first time) → create `/VIDEO` → home menu.
+
+| Location | Content | Format |
+| :--- | :--- | :--- |
+| SD root | album images (SNAKE.BIN / WHALE.BIN / SCREEN.BIN, written on boot) | 1024-byte page-format bitmap |
+| SD `/VIDEO/` | video files (e.g. `18BADAPP.BIN`) | continuous frame stream, 1024 bytes/frame page format |
+
+### Image format (ALBUM)
+
+- **1024 bytes** each: 128x64 monochrome, **page format** (`bmp[page*128+x]` bit `y%8` = pixel (x,y)),
+  identical to SSD1306 GDDRAM so it can be displayed directly
+- Built-in `SNAKE.BIN`, `WHALE.BIN`, `SCREEN.BIN` are written to the root on first boot
+- Add images: any 128x64 page-format bitmap with a `.BIN` extension in the SD root
+
+### Video format (VIDEO)
+
+- Files live in **`/VIDEO/`**, extension `.BIN`
+- Content is a **continuous frame stream**: 1024 bytes per frame, page format
+- **Frame rate = first 2 digits of the filename**: `18BADAPP.BIN` = 18fps; non-numeric prefix defaults to 18fps
+- Example: `video_badapple.txt` (3504 frames) converted to `18BADAPP.BIN` (3.4MB) — drop it in `/VIDEO/`
+- Add videos: name them `fps+name.BIN` (e.g. `24CLOCK.BIN` = 24fps)
+
+> Videos are MB-sized — far beyond 64KB Flash — so they **must** live on the SD card.
+> Without a card reader, use the DL uploader (TTL).
+
+## Applications
+
+### GAME: software list
+
+```
+SOFTWARE
+1.SNAKE     >      ← LT/RT move cursor, arrow at selected row
+2.DINO
+```
+
+| Game | Controls |
+| :--- | :--- |
+| Snake (1.SNAKE) | A/D-pad up = start/confirm, D-pad/stick = direction (no 180° turn), B = pause, X = exit; walls wrap |
+| Dino (2.DINO) | A/D-pad up = jump, B = pause, X = exit; obstacles speed up with score, collision = GAME OVER |
+
+### ALBUM: photo viewer
+
+- LT/RT = previous/next image, A or X = back to home
+- Shows every `.BIN` image in the SD root, full screen
+
+### VIDEO: player
+
+- List: enumerates `/VIDEO/*.BIN`, LT/RT moves the cursor, A plays; **the bottom row is always the DL uploader**
+- Playback: streams frames at the filename frame rate (double-buffered full-frame blit),
+  **B pause/resume**, **Y delete confirm dialog**, **X exit**, loops at the end
+
+### RADAR: servo + ultrasonic
+
+Pick a mode on entry (LT/RT select, A confirm, X back):
+
+**1 MANUAL** — manual servo control:
+- LT counter-clockwise / RT clockwise, **hold to accelerate** (speed accumulates per tick, capped at
+  8°/tick, resets on release)
+- Large angle readout + progress bar
+
+**2 AUTO** — auto-sweep radar:
+- Servo sweeps 0°–180° back and forth (2° per tick, 25ms)
+- HC-SR04 ranging at every angle (speed of sound `us/58 = cm`; trigger interval forced ≥60ms to avoid
+  losing far echoes)
+- Draws a **polar radar image**: three range rings + 30° grid lines + persistence trail (bold 3x3 dots)
+  + sweep line
+- Live `A:angle D:distance cm` readout; **mirrors left/right when mounted upside down**
+  (`RADAR_MOUNT_INVERT=1`)
+
+### SIGNAL: signal generator
+
+Pick a mode on entry (LT/RT select, A confirm, X back):
+
+**1 USB → PC** — micro USB straight into the PC:
+- **USB CDC virtual COM port** (ST VID/PID; install the ST VCP driver and a COM port appears),
+  no TTL adapter needed
+- Sends waveform samples in the **JustFloat protocol** (float value + tail `00 00 80 7F`); select
+  JustFloat in vofa+ to see the live waveform
+- Four waveforms: sine / triangle / square / sawtooth, switched with LT/RT
+- A cycles the parameter (F frequency / A amplitude / D duty), left-right adjusts it
+- `TX:` packet counter at the bottom; the UI never blocks when USB is not enumerated
+
+**2 GPIO → PA4** — push-pull output (no DAC/TIM required):
+- **Square wave / PWM-modulated waveforms**: 25kHz carrier, duty cycle modulated point by point,
+  supporting sine / triangle / square / sawtooth
+- Frequency 10Hz–3kHz (at least 8 samples per period), amplitude and duty adjustable
+- Reconstruction: add an RC low-pass (1kΩ + 100nF) for a smooth analog wave, or view the PWM
+  envelope on a scope
+
+> This mode **does not depend on DAC/DMA/TIM (APB1 peripherals)** — useful when a board's APB1
+> domain is faulty and the DAC is unusable. If your board has a working DAC, an earlier firmware
+> revision used it.
+
+## Project structure
+
+```
+User/
+  main.c          main: SD init + build home pages + enter page-flip menu (5 pages)
+  menu.h/.c       full-screen page-flip menu: linked list + state machine + sine easing + dirty rect
+  gamesnake.h/.c  snake game
+  gamedino.h/.c   dino runner game
+  album.h/.c      album: enumerate .BIN images in SD root, LT/RT switch
+  video.h/.c      video: enumerate /VIDEO/*.BIN, play at filename frame rate, Y delete, DL at bottom
+  sd_dl.h/.c      TTL upload: receive video BIN on USART1 -> FatFS write to /VIDEO/ (per-block ACK)
+  gamepad.h/.c    gamepad driver: USART1 interrupt receive + 18-byte frame parsing
+  sd_spi.h/.c     SD SPI driver: init sequence + sector R/W + CSD capacity (CS = PB0)
+  ssd1306.h/.c    SSD1306 driver: 4-wire software SPI, double buffer, clipped drawing
+  servo.h/.c      RADAR app: S3010 servo (TIM2_CH3/PA2) + HC-SR04 (PA0/PA1) + radar image
+  signal.h/.c     SIGNAL app: USB CDC (vofa+) + GPIO PWM waveform (PA4)
+  images.h        built-in images (snake/whale/screen/cmd/radar/signal, horizontal format)
+  bsp_delay.h/.c  SysTick 1ms tick + DWT microsecond delay
+  fonts.h/.c      8x16 (VGA) and 8x8 ASCII fonts, index = ch - 0x20
+  stm32f10x_it.c  SysTick_Handler 1ms counter; USB interrupt (USB_Istr)
+  usb/            ST USB-FS-Device library: CDC virtual COM (usb_core/desc/prop/endp/pwr/...)
+    hw_config.c   board glue: USB 48MHz clock, interrupts, CDC_Send_DATA
+    platform_config.h  pin/ID adaptation (PA15 pull-up placeholder)
+FatFs/
+  ff.c ff.h ffconf.h ffsystem.c diskio.c diskio.h   FatFS R0.14b
+  diskio.c        glue to SD_ReadSector / SD_WriteSector
+Library/          SPL 3.5.0 peripheral library
+Start/            startup file, core_cm3, stm32f10x.h, system_stm32f10x.c
+```
+
+## Implementation notes
+
+- **Gamepad frame parsing**: an 18-byte state machine in the USART1 RXNE interrupt, header + checksum
+  over the first 17 bytes; buttons are edge-latched (one event per press); triggers/sticks polled live;
+  **LT/RT trigger threshold = last 1/5 of travel** (`GAMEPAD_TRIGGER_ON = 26214`).
+- **Page-flip menu**: each page is a full-screen 128x64 image; on LT/RT the old page slides out and the
+  new one slides in with **easeInOutSine** easing, smooth at both ends; the app name is centered at
+  the bottom.
+- **SD driver**: CMD0 → CMD8 (SDHC detect) → ACMD41 (auto-falls back from HCS=1 to HCS=0 for old cards)
+  → CMD58 (capacity class) → CMD16; 281kHz init, 9MHz run; ACMD41 timeout 3s.
+- **FatFS integration**: `diskio.c` maps to `SD_ReadSector/WriteSector`; `ffconf.h` enables
+  `FF_USE_MKFS` (auto FAT32 format), `FF_CODE_PAGE=437`, `FF_FS_NORTC=1`.
+- **SSD1306 double buffering**: draw buffer `s_fb` + transfer buffer `s_tx`; `Display()` snapshots then
+  sends the whole frame, so drawing during transfer never tears; `DisplayRange()` refreshes dirty pages;
+  `ShowBitmapRegion()` clips negative coordinates (used by page-flip animation).
+- **Video playback**: sequential `f_read` of 1024 bytes per frame (no per-frame seek), seek only when
+  wrapping around; frame rate 1–60fps parsed from the filename.
+- **TTL upload**: DL momentarily disables the gamepad RXNE interrupt and polls USART1 frames
+  (`0xA5 0x5A` header + command + checksum, `SUM = (CMD+payload) & 0xFF`); each 512-byte block is
+  ACKed (`0x06`) or NAKed (`0x15`) so the PC can retry; FatFS `f_write` stores it, then the gamepad
+  is restored automatically.
+- **Ultrasonic ranging**: DWT microsecond timing of the Echo high pulse, `us/58 = cm`; trigger
+  interval forced ≥60ms (HC-SR04 datasheet requirement — faster triggering loses far echoes).
+- **USB CDC**: ST USB-FS-Device library over the micro USB port; JustFloat protocol;
+  `fSuspendEnabled = FALSE` prevents suspend from entering STOP mode; the USB interrupt runs at the
+  lowest priority so it can never starve SysTick; exit disables interrupts and powers down USB.
+- **GPIO waveform**: PA4 outputs a 25kHz PWM whose duty cycle follows a 256-point waveform table,
+  reconstructing an analog wave through an RC low-pass; no APB1 peripherals involved.
+
+## Build and flash
+
+1. Open `Project.uvprojx` in Keil MDK
+2. Build (0 Errors / 0 Warnings)
+3. Flash over ST-Link SWD (**power the board from the ST-Link only while flashing — do not also
+   connect a separate supply**, or the two supplies fight and the download fails with
+   "Internal command error")
+
+## Configuration switches
+
+| Macro | Location | Description |
+| :--- | :--- | :--- |
+| `OLED_SELFTEST` | main.c | 1 = OLED self-test (geometry + font sweep, for a new panel); 0 = normal mode |
+| `GAMEPAD_BAUDRATE` | gamepad.h | UART baud rate (115200, must match the PC tool) |
+| `GAMEPAD_STICK_DEADZONE` | gamepad.h | left stick dead zone (default 8000, full scale ±32768) |
+| `GAMEPAD_TRIGGER_ON` | gamepad.h | LT/RT trigger threshold (default 26214 = last 1/5 of travel) |
+| `RADAR_MOUNT_INVERT` | servo.c | 1 = radar mounted upside down, mirror the display |
+| `RADAR_STEP` / `RADAR_TICK_MS` | servo.c | radar sweep step (°) / tick interval (ms) |
+| `SERVO_SPEED_BASE/ACCEL/MAX` | servo.c | manual-mode acceleration parameters |
+| `ULTRA_MIN_INTERVAL_US` | servo.c | minimum ultrasonic trigger interval (60000us = 60ms) |
+| `SNAKE_TICK_MS` | gamesnake.h | snake move period (default 200ms) |
+| `DINO_TICK_MS` / `DINO_JUMP_V` | gamedino.h/.c | dino step period / jump initial velocity |
+| `MENU_ANIM_MS` | menu.c | home page-flip animation duration (default 200ms) |
+| `SSD1306_SEGMENT_REMAP` | ssd1306.h | 0 = 0xA0 no remap; 1 = 0xA1 segment remap (default) |
+| `SSD1306_COM_SCAN_INVERT` | ssd1306.h | 0 = 0xC0 normal scan; 1 = 0xC8 inverted scan (default) |
+| `SSD1306_SPI_HALF_PERIOD_US` | ssd1306.h | software SPI half period, 2us ≈ 250kHz; increase to slow down |
+| `FF_USE_MKFS` | FatFs/ffconf.h | 1 = allow `f_mkfs` auto FAT32 formatting |
+| `DL_DATA_MAX` | sd_dl.c | max bytes per upload block (512) |
+
+## Caveats
+
+- **Encoding**: sources are UTF-8 **with BOM**. ARMCC V5 reads BOM-less UTF-8 using the system code
+  page (GBK), garbling Chinese comments and raising #870 on Chinese string literals. Keep the BOM.
+- **Crystal**: configured for an 8MHz HSE (PLL ×9 = 72MHz). With a different crystal, change
+  `HSE_VALUE` in `stm32f10x.h`, otherwise delays and SPI/I2C timing are off.
+- **Common ground is mandatory**. A floating regulator ground causes SPI/I2C glitches, flicker and
+  SD failures.
+- **After swapping the panel**, verify with `OLED_SELFTEST=1` (geometry + font sweep) before
+  switching back to `0`.
+- **SD card supply**: this module wants **5V** (on-board regulator/level shifter). At 3.3V the ACMD41
+  init times out (`r1:01`); 5V fixes it.
+- **HC-SR04 supply**: must be 5V (3.3V reaches only a few cm); **its Echo is 5V while PA1 is not
+  5V tolerant** — add a 500Ω series resistor or a 1k+2k divider to protect the pin.
+- **Servo supply**: the S3010 draws significant current; give it a separate supply that shares only
+  ground, not a weak shared 5V rail.
+- **Flashing supply**: connect only the ST-Link (including 3.3V) while flashing — **do not also plug
+  a separate supply**, otherwise the download fails with "Internal command error". Unplug the ST-Link
+  and use the separate supply to run.
+- **USB mode**: micro USB straight to the PC; install the ST VCP driver (a "device not recognized"
+  message on first plug usually means re-plug or reinstall the driver). vofa+ must use **JustFloat**;
+  the UI never locks up when USB is not enumerated.
+- **Videos must be in `/VIDEO/`**, with the frame rate as the first 2 filename characters; images go
+  in the root.
+- **Gamepad frames are little-endian**, matching the PC-side `struct.pack("<...")`.
+- **Before DL**: close `handle_to_serial.py`, make sure the port is free, and wire USB-TTL RX → PA9
+  (ACKs are required). The gamepad is unavailable during upload and is restored afterwards.
+- **APB1 note**: if a board shows "GPIO works but TIM2/DAC registers read back 0" (a re-marked or
+  refurbished chip with a faulty APB1 domain), the servo (TIM2) and DAC are unusable — use SIGNAL's
+  **GPIO mode**, which avoids APB1 entirely.
+
+## Troubleshooting
+
+| Symptom | What to check |
+| :--- | :--- |
+| OLED completely blank | 4-wire SPI wiring (PB12/13/14/15 + PA8); RES; common ground |
+| All text mirrored | flip `SSD1306_SEGMENT_REMAP` (0xA0 ↔ 0xA1) |
+| Image upside down | flip `SSD1306_COM_SCAN_INVERT` (0xC0 ↔ 0xC8) |
+| Garbled display | increase `SSD1306_SPI_HALF_PERIOD_US`; shorten jumper wires |
+| SD: FAIL | wiring (PB0/5/6/7); **5V supply**; card health; read the diagnostic code |
+| SD `d:1` (no CMD0 response) | CS not on PB0 / MOSI-MISO-SCK loose / module unpowered |
+| SD `d:2 r1:01` | card not ready: **undervoltage (use 5V)**, bad contact, clean the contacts |
+| SD `d:2 r1:FF` | MISO line broken |
+| ALBUM shows nothing | `.BIN` files in SD root; first-boot write needs a working SD |
+| VIDEO list empty | `/VIDEO/` exists (created on boot); `.BIN` files present |
+| Video stutters | filename frame rate (e.g. 18BADAPP.BIN = 18fps); SD card speed |
+| DL: TIMEOUT | PC running `video_to_bin.py --send-sd`; correct port; enter DL from the VIDEO list |
+| DL: SD OPEN FAIL | SD not mounted/healthy |
+| DL: FAIL | upload interrupted; RX (PA9) not wired; retry exceeded; just rerun |
+| Gamepad unresponsive | PC tool running; 115200; PA10 to USB-TTL TX; common ground |
+| Radar misses distant objects | HC-SR04 on 5V; Echo divider/series resistor; 60ms interval is enforced; sensor aim |
+| Radar image mirrored | set `RADAR_MOUNT_INVERT` to 1 (upside-down mount) |
+| SIGNAL PA4 silent | use GPIO mode (2 GPIO); PA4 not shared with other wiring; meter ground connected |
+| vofa shows no waveform | select **JustFloat** in vofa+; open the right COM port; press start; install ST VCP driver |
+| USB "device not recognized" | try another cable; re-plug; reinstall ST VCP driver; check the D+ pull-up |
+| "Internal command error" when flashing | power from the ST-Link only; unplug the separate supply |
+
+## References
+
+- SSD1306 datasheet (same init sequence as the Adafruit SSD1306 example)
+- SD card physical layer simplified specification v2.00 (SPI mode commands/responses)
+- FatFS documentation (elm-chan.org, R0.14b)
+- ST USB-FS-Device library V4.0 (CDC virtual COM port)
+- HC-SR04 ultrasonic module datasheet
+- Linux `lib/fonts/font_8x16.c` (VGA 8x16 font data, public domain)
